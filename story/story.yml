@@ -7,12 +7,14 @@ Start:
   - Person2: What?
   - Person1: You're torturing that poor stuffed animal! How could you?
   - choices:
-      it's top secret: Passage2
+      it's top secret: Passage1
       he needs to be PUNISHED: Passage3
-      idk man: Passage2
+      idk man: Passage1
 
-Passage2:
-  - set: { charisma +: 1 }
+Passage1:
+  - set:
+      charisma +=: 1
+      stealth -=: 1
   - Person1: I don't believe you.
   - Person2: I don't need to tell you.
   - if charisma > 2:
@@ -27,7 +29,8 @@ Passage2:
               damn: Start
     else:
       - Person2: Fine. Be that way. :/
-      - goto: Start
+  - End of passage 1.
+  - goto: Start
 
 Passage3:
   - set: { charisma =: 10 }

@@ -5,50 +5,82 @@ pub use crate::structs::{Branches, Config, Passage, PassageLine, Story};
 pub use crate::validate::validate;
 pub use colored::*;
 
-pub struct Runner {
-    pub config: Config,
-    pub story: Story,
+pub struct Runner<'r> {
+    pub config: &'r mut Config,
+    pub story: &'r Story,
     pub line: usize,
+    pub passage: &'r Passage,
+    pub lines: Vec<&'r PassageLine>,
 }
 
-impl Runner {
-    pub fn load(config_str: &str, story_str: &str) -> Result<Self, serde_yaml::Error> {
+impl<'r> Runner<'r> {
+    pub fn new(config: &'r mut Config, story: &'r Story) -> Self {
         // Flatten dialogue lines
-        Ok(Self {
-            config: serde_yaml::from_str(&config_str)?,
-            story: serde_yaml::from_str(&story_str)?,
+        let passage = &story[&config.passage];
+        let mut runner = Self {
+            config,
+            story,
             line: 0,
-        })
+            lines: vec![],
+            passage,
+        };
+        runner.load_lines(passage);
+        runner
     }
 
-    /// Given a relative line number, gets a reference to the passage line
-    /// at that line number.
-    /// Returns None if the line is out of bounds.
-    fn get_branch_line(line: usize, branches: &Branches<PassageLine>) -> Option<&PassageLine> {
-        let mut curr_line = line;
-        for (_expression, branch_lines) in branches {
-            let branch_line = Self::get_line(curr_line, branch_lines);
-            if branch_line.is_some() {
-                return branch_line;
+    fn load_lines(&mut self, lines: &'r [PassageLine]) {
+        for line in lines {
+            match line {
+                PassageLine::Branches(branches) => {
+                    self.lines.push(&line);
+                    for (_expression, branch_lines) in branches {
+                        self.load_lines(branch_lines)
+                    }
+                }
+                _ => self.lines.push(&line),
             }
-            curr_line -= branch_len(branch_lines);
         }
-        None
+    }
+    fn goto(&mut self, passage_name: &str) {
+        self.config.passage = passage_name.to_string();
+        self.config.line = 0;
+        self.passage = &self.story[&self.config.passage];
+        self.lines = vec![];
+        self.load_lines(self.passage);
     }
 
-    /// Given a relative line number, returns a reference to that line.
-    /// If
-    /// Returns None if the line is out of bounds.
-    fn get_line(line: usize, lines: &[PassageLine]) -> Option<&PassageLine> {
-        // If we can find the line at this level, return that line.
-        if line < lines.len() {
-            return Some(&lines[line]);
-        }
-        let last_line = lines.last();
-        if let Some(PassageLine::Branches(branches)) = last_line {
-            Self::get_branch_line(line - lines.len(), branches)
-        } else {
-            None
+    fn handle_line(&mut self, input: &str, line: &'r PassageLine) -> &'r PassageLine {
+        match line {
+            // When a choice is encountered, it should first be returned for display.
+            // Second time its encountered,
+            PassageLine::SetCmd(set) => {
+                update_state(&mut self.config.state, &set.set).unwrap();
+                self.config.line += 1;
+                &PassageLine::Continue
+            }
+            PassageLine::Choices(choices) => {
+                if choices.choices.contains_key(input) {
+                    self.goto(&choices.choices[input]);
+                    &PassageLine::Continue
+                } else if input.is_empty() {
+                    line
+                } else {
+                    &PassageLine::InvalidChoice
+                }
+            }
+            PassageLine::Branches(branches) => {
+                take_branch(&mut self.config, branches).unwrap();
+                &PassageLine::Continue
+            }
+            PassageLine::Goto(goto) => {
+                self.goto(&goto.goto);
+                &PassageLine::Continue
+            }
+            _ => {
+                // For all others, progress to the next dialog line.
+                self.config.line += 1;
+                line
+            }
         }
     }
     // Processes input from the previous line, and returns the next line.
@@ -64,66 +96,21 @@ impl Runner {
         let mut result = &PassageLine::Continue;
         let mut curr_input = input;
         while result == &PassageLine::Continue {
-            println!("{}", format!("{:?}", self.config).italic().bright_black());
-            let passage = &self.story[&self.config.passage];
-
-            // If line is None, this is the end of the story.
-            let line_or = Self::get_line(self.config.line, &passage);
-            if line_or.is_none() {
-                return None;
+            #[cfg(debug_assertions)]
+            {
+                println!(
+                    "{}",
+                    format!("Input {}", curr_input).italic().bright_black()
+                );
+                println!("{}", format!("{:?}", self.config).italic().bright_black());
             }
 
-            // Otherwise process the line.
-            let line = line_or.unwrap();
-            result = match line {
-                // When a choice is encountered, it should first be returned for display.
-                // Second time its encountered,
-                PassageLine::SetCmd(set) => {
-                    update_state(&mut self.config.state, &set.set).unwrap();
-                    self.config.line += 1;
-                    &PassageLine::Continue
-                }
-                PassageLine::Choices(choices) => {
-                    if choices.choices.contains_key(curr_input) {
-                        self.config.passage = choices.choices[curr_input].to_string();
-                        self.config.line = 0;
-                        &PassageLine::Continue
-                    } else {
-                        println!(
-                            "{} was not one of the chocies {:?}",
-                            curr_input, choices.choices
-                        );
-                        line
-                    }
-                }
-                PassageLine::Branches(branches) => {
-                    take_branch(&mut self.config, branches).unwrap();
-                    &PassageLine::Continue
-                }
-                PassageLine::Goto(goto) => {
-                    self.config.passage = goto.goto.to_string();
-                    self.config.line = 0;
-                    &PassageLine::Continue
-                }
-                _ => {
-                    // For all others, progress to the next dialog line.
-                    self.config.line += 1;
-                    line
-                }
-            };
+            if self.config.line >= self.lines.len() {
+                return None;
+            }
+            result = self.handle_line(curr_input, self.lines[self.config.line]);
             curr_input = "";
         }
         Some(result)
-    }
-}
-
-#[test]
-fn test_load() {
-    let story_str = include_str!("../../story/story.yml");
-    let config_str = include_str!("../../story/config.yml");
-    let runner = Runner::load(config_str, story_str).unwrap();
-    match validate(&runner.config, &runner.story) {
-        Err(e) => assert!(false, format!("{}", e)),
-        Ok(_) => assert!(true),
     }
 }

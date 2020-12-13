@@ -26,22 +26,22 @@ pub type Dialogue = Map<String, String>;
 
 pub type Branches<T> = LinearMap<String, Vec<T>>;
 
-#[derive(Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Choices {
     pub choices: Map<String, String>,
 }
 
-#[derive(Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Goto {
     pub goto: String,
 }
 
-#[derive(Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SetCmd {
     pub set: State,
 }
 
-#[derive(Debug, PartialEq, Deserialize, Serialize)]
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
 #[serde(untagged)]
 pub enum PassageLine {
     Branches(Branches<PassageLine>),
@@ -51,6 +51,7 @@ pub enum PassageLine {
     SetCmd(SetCmd),
     Dialogue(Dialogue),
     Continue,
+    InvalidChoice,
 }
 
 pub type Passage = Vec<PassageLine>;

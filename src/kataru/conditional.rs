@@ -113,8 +113,5 @@ mod tests {
                 cmp: Comparator::GT
             }
         );
-
-        // let state: State = vec![("foo", 0), ("bar", 1)].into_iter().collect();
-        // assert_eq!(cond.eval(state), true);
     }
 }
