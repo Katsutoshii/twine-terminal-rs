@@ -1,0 +1,17 @@
+[package]
+authors = ["Josiah Putman <joshikatsu@gmail.com>"]
+edition = "2018"
+name = "twine-terminal-rs"
+version = "0.1.0"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+colored = "2.0.0"
+html_parser = "0.5.0"
+serde = "1.0.117"
+serde_yaml = "0.8.4"
+tweep = "0.3.0"
+yaml-rust = "0.4.4"
+# linked-hash-map = "0.5.3"
+linear-map = {version = "1.2.0", features = ["serde_impl"]}
